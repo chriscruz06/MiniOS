@@ -1,0 +1,21 @@
+# Compiled object files
+*.o
+
+# Binary files
+*.bin
+
+# Disk images
+*.iso
+*.img
+
+# Editor backup files
+*.swp
+*.swo
+*~
+
+# Build artifacts (if you use a build directory)
+build/
+
+# OS-specific
+.DS_Store
+Thumbs.db

@@ -1,0 +1,17 @@
+To Run Ubuntu:
+wsl -d Ubuntu
+
+To select desktop file (same as normal):
+cd /mnt/c/Users/cruz0/Desktop
+
+To save boot strap file:
+nasm -f bin boot.asm -o boot.bin
+
+To open in QEMU:
+qemu-system-x86_64 boot.bin
+
+wsl -d Ubuntu
+cd /mnt/c/Users/cruz0/Desktop
+nasm -f bin boot.asm -o boot.bin
+qemu-system-x86_64 boot.bin
+
