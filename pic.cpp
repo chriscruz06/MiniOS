@@ -37,6 +37,6 @@ void pic_remap() {
     
     // Restore masks (or set new ones)
     // Enable only keyboard (IRQ1) for now
-    outb(PIC1_DATA, 0xFD);  // 11111101 - only IRQ1 enabled -- she bi on my nary
+    outb(PIC1_DATA, 0xFC); // Now timer and keyboard - 11111100  - she still bi on my nary
     outb(PIC2_DATA, 0xFF);  // All disabled
 }

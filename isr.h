@@ -27,4 +27,10 @@ extern "C" {
     void isr44(); void isr45(); void isr46(); void isr47();
 }
 
+// Function pointer type for interrupt handlers
+typedef void (*isr_handler_t)(registers_t*);
+
+// Register a handler for a specific interrupt number
+void register_interrupt_handler(uint8_t n, isr_handler_t handler);
+
 #endif // warhammer darktide is so fun they need to add adeptus mechanicus as a class tho

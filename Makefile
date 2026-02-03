@@ -16,13 +16,13 @@ ASM_ENTRY = kernel_entry.asm
 ASM_ISR = isr.asm
 ASM_IDT = idt.asm
 
-CPP_SOURCES = kernel.cpp idt.cpp isr.cpp pic.cpp
+CPP_SOURCES = kernel.cpp idt.cpp isr.cpp pic.cpp keyboard.cpp timer.cpp
 
 # Object files
 OBJ_ENTRY = kernel_entry.o
 OBJ_ISR_ASM = isr_asm.o
 OBJ_IDT_ASM = idt_asm.o
-OBJ_CPP = kernel.o idt.o isr.o pic.o
+OBJ_CPP = kernel.o idt.o isr.o pic.o keyboard.o timer.o
 
 ALL_OBJS = $(OBJ_ENTRY) $(OBJ_CPP) $(OBJ_IDT_ASM) $(OBJ_ISR_ASM)
 
@@ -67,10 +67,16 @@ kernel.o: kernel.cpp
 idt.o: idt.cpp idt.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
-isr.o: isr.cpp isr.h
+isr.o: isr.cpp isr.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
 pic.o: pic.cpp pic.h ports.h
+	$(CC) $(CFLAGS) $< -o $@
+
+keyboard.o: keyboard.cpp keyboard.h isr.h ports.h
+	$(CC) $(CFLAGS) $< -o $@
+
+timer.o: timer.cpp timer.h isr.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
 # Clean build artifacts
