@@ -7,7 +7,6 @@
 
 // Remap PIC so IRQs 0-15 become interrupts 32-47
 void pic_remap() {
-    // Save masks
     uint8_t mask1 = inb(PIC1_DATA);
     uint8_t mask2 = inb(PIC2_DATA);
     
@@ -35,8 +34,6 @@ void pic_remap() {
     outb(PIC2_DATA, 0x01);
     io_wait();
     
-    // Restore masks (or set new ones)
-    // Enable only keyboard (IRQ1) for now
     outb(PIC1_DATA, 0xFC); // Now timer and keyboard - 11111100  - she still bi on my nary
     outb(PIC2_DATA, 0xFF);  // All disabled
 }
