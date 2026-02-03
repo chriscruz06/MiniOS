@@ -1,4 +1,4 @@
-# MiniOS Makefile
+# ChrisOS Makefile
 
 # Tools
 ASM = nasm
@@ -7,7 +7,7 @@ LD = i686-elf-ld
 QEMU = qemu-system-i386
 
 # Flags
-CFLAGS = -ffreestanding -m32 -fno-exceptions -fno-rtti -O0 -c
+CFLAGS = -ffreestanding -m32 -fno-exceptions -fno-rtti -c
 LDFLAGS = -Ttext 0x1000 --oformat binary
 
 # Source files
@@ -16,13 +16,13 @@ ASM_ENTRY = kernel_entry.asm
 ASM_ISR = isr.asm
 ASM_IDT = idt.asm
 
-CPP_SOURCES = kernel.cpp idt.cpp isr.cpp pic.cpp keyboard.cpp timer.cpp sleep.cpp
+CPP_SOURCES = kernel.cpp idt.cpp isr.cpp pic.cpp keyboard.cpp timer.cpp
 
 # Object files
 OBJ_ENTRY = kernel_entry.o
 OBJ_ISR_ASM = isr_asm.o
 OBJ_IDT_ASM = idt_asm.o
-OBJ_CPP = kernel.o idt.o isr.o pic.o keyboard.o timer.o sleep.o
+OBJ_CPP = kernel.o idt.o isr.o pic.o keyboard.o timer.o
 
 ALL_OBJS = $(OBJ_ENTRY) $(OBJ_CPP) $(OBJ_IDT_ASM) $(OBJ_ISR_ASM)
 
@@ -77,9 +77,6 @@ keyboard.o: keyboard.cpp keyboard.h isr.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
 timer.o: timer.cpp timer.h isr.h ports.h
-	$(CC) $(CFLAGS) $< -o $@
-
-sleep.o: sleep.cpp sleep.h timer.h
 	$(CC) $(CFLAGS) $< -o $@
 
 # Clean build artifacts

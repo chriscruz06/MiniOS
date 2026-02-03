@@ -82,7 +82,9 @@ void idt_init() {
     idt_set_gate(46, (uint32_t)isr46, 0x08, IDT_INTERRUPT_GATE);
     idt_set_gate(47, (uint32_t)isr47, 0x08, IDT_INTERRUPT_GATE);
 
+    // Remap PIC
     pic_remap();
 
+    // Load IDT
     idt_load((uint32_t)&idt_descriptor);
 }

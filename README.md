@@ -11,8 +11,10 @@ Heavily in progress.
 - **GDT**: Global Descriptor Table implementation
 - **IDT**: Complete Interrupt Descriptor Table with ISRs
 - **PIC**: Programmable Interrupt Controller with remapping
+- **PIT Timer**: Programmable Interval Timer at 100Hz with handler registration
 - **Keyboard Driver**: PS/2 keyboard input with scancode-to-ASCII conversion
 - **VGA Text Mode**: Text output with scrolling support
+- **Sleep**: Timing functions (sleep_ms, sleep_ticks)
 
 ## Project Structure
 
@@ -22,10 +24,12 @@ Heavily in progress.
 ├── kernel.cpp         # Main kernel (C++)
 ├── idt.asm / idt.cpp  # Interrupt Descriptor Table
 ├── isr.asm / isr.cpp  # Interrupt Service Routines
-├── pic.asm / pic.cpp  # PIC controller
-├── ports.cpp          # I/O port operations
-├── disk.asm           # Disk reading routines
-└── linker.ld          # Linker script (if applicable)
+├── pic.cpp            # PIC controller
+├── timer.cpp          # PIT timer driver
+├── keyboard.cpp       # PS/2 keyboard driver
+├── sleep.cpp          # Sleep/delay functions
+├── ports.h            # I/O port operations
+└── Makefile           # Build automation
 ```
 
 ## Building
@@ -39,26 +43,17 @@ Heavily in progress.
 ### Build Commands
 
 ```bash
-# Assemble bootloader
-nasm -f bin boot.asm -o boot.bin
+# Build everything
+make
 
-# Compile and link kernel components
-# (adjust based on your actual build process)
-i686-elf-as kernel_entry.asm -o kernel_entry.o
-i686-elf-g++ -ffreestanding -m32 -c kernel.cpp -o kernel.o
-# ... additional components ...
+# Build and run in QEMU
+make run
 
-# Link everything
-i686-elf-ld -o full_kernel.bin -Ttext 0x1000 kernel_entry.o kernel.o ...
+# Clean build artifacts
+make clean
 
-# Create OS image
-cat boot.bin full_kernel.bin > OS.bin
-```
-
-### Running
-
-```bash
-qemu-system-i386 -fda OS.bin
+# Full rebuild
+make rebuild
 ```
 
 ## Development Environment
@@ -69,7 +64,13 @@ qemu-system-i386 -fda OS.bin
 
 ## Roadmap
 
-- [ ] Timer (IRQ0) implementation
+- [x] Bootloader
+- [x] Protected mode
+- [x] IDT & ISRs
+- [x] PIC remapping
+- [x] Timer (IRQ0)
+- [x] Keyboard driver
+- [x] Sleep functions
 - [ ] Command shell interface
 - [ ] Memory management (physical & virtual)
 - [ ] File system support
@@ -77,7 +78,7 @@ qemu-system-i386 -fda OS.bin
 ## Resources
 
 Built following various OS development tutorials and resources, including the OSDev Wiki and heavily jumpstarted by 
-"Daedalus Community"s OS Dev guide.  Lots of google and reddit posts too.
+"Daedalus Community"s OS Dev guide. Lots of google and reddit posts too.
 
 ## License
 

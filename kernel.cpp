@@ -2,11 +2,11 @@
 #include "keyboard.h"
 #include "timer.h"
 #include <stdint.h>
-#include "sleep.h"
 
 extern "C" void main() {
     idt_init();
     
+    // Initialize drivers (registers their handlers)
     keyboard_init();
     timer_init(100);  // 100 Hz = tick per 10ms
     
@@ -19,9 +19,7 @@ extern "C" void main() {
     
     // Interrupts
     __asm__ volatile("sti");
-
-    vga[81] = (0x0A << 8) | '!';  // Green ! when done
-
+    
     // Halt loop (god willing)
     while (1) {
         __asm__ volatile("hlt");
