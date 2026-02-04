@@ -6,7 +6,6 @@
 extern "C" void main() {
     idt_init();
     
-    // Initialize drivers (registers their handlers)
     keyboard_init();
     timer_init(100);  // 100 Hz = tick per 10ms
     
