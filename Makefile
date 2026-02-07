@@ -1,4 +1,5 @@
-# ChrisOS Makefile
+# MiniOS Makefile
+# Cause im lazy and so are you!
 
 # Tools
 ASM = nasm
@@ -7,7 +8,7 @@ LD = i686-elf-ld
 QEMU = qemu-system-i386
 
 # Flags
-CFLAGS = -ffreestanding -m32 -fno-exceptions -fno-rtti -c
+CFLAGS = -ffreestanding -m32 -fno-exceptions -fno-rtti -O0 -c
 LDFLAGS = -Ttext 0x1000 --oformat binary
 
 # Source files
@@ -16,13 +17,13 @@ ASM_ENTRY = kernel_entry.asm
 ASM_ISR = isr.asm
 ASM_IDT = idt.asm
 
-CPP_SOURCES = kernel.cpp idt.cpp isr.cpp pic.cpp keyboard.cpp timer.cpp
+CPP_SOURCES = kernel.cpp idt.cpp isr.cpp pic.cpp keyboard.cpp timer.cpp sleep.cpp vga.cpp shell.cpp
 
 # Object files
 OBJ_ENTRY = kernel_entry.o
 OBJ_ISR_ASM = isr_asm.o
 OBJ_IDT_ASM = idt_asm.o
-OBJ_CPP = kernel.o idt.o isr.o pic.o keyboard.o timer.o
+OBJ_CPP = kernel.o idt.o isr.o pic.o keyboard.o timer.o sleep.o vga.o shell.o
 
 ALL_OBJS = $(OBJ_ENTRY) $(OBJ_CPP) $(OBJ_IDT_ASM) $(OBJ_ISR_ASM)
 
@@ -61,10 +62,10 @@ $(OBJ_IDT_ASM): $(ASM_IDT)
 	$(ASM) -f elf32 $< -o $@
 
 # C++ objects
-kernel.o: kernel.cpp
+kernel.o: kernel.cpp idt.h keyboard.h timer.h shell.h
 	$(CC) $(CFLAGS) $< -o $@
 
-idt.o: idt.cpp idt.h ports.h
+idt.o: idt.cpp idt.h isr.h pic.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
 isr.o: isr.cpp isr.h ports.h
@@ -73,15 +74,24 @@ isr.o: isr.cpp isr.h ports.h
 pic.o: pic.cpp pic.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
-keyboard.o: keyboard.cpp keyboard.h isr.h ports.h
+keyboard.o: keyboard.cpp keyboard.h isr.h ports.h shell.h
 	$(CC) $(CFLAGS) $< -o $@
 
 timer.o: timer.cpp timer.h isr.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
+sleep.o: sleep.cpp sleep.h timer.h
+	$(CC) $(CFLAGS) $< -o $@
+
+vga.o: vga.cpp vga.h
+	$(CC) $(CFLAGS) $< -o $@
+
+shell.o: shell.cpp shell.h vga.h timer.h sleep.h
+	$(CC) $(CFLAGS) $< -o $@
+
 # Clean build artifacts
 clean:
-	rm -f $(BOOT_BIN) $(KERNEL_BIN) $(OS_IMAGE) $(ALL_OBJS) $(OBJ_IDT_ASM) $(OBJ_ISR_ASM)
+	rm -f $(BOOT_BIN) $(KERNEL_BIN) $(OS_IMAGE) $(ALL_OBJS)
 
 # Rebuild everything
 rebuild: clean all
