@@ -3,13 +3,22 @@
 #include "timer.h"
 #include "sleep.h"
 #include "ports.h"
+#include "keyboard.h"
 
 #define CMD_BUFFER_SIZE 256
+#define HISTORY_SIZE 10
 
 static char cmd_buffer[CMD_BUFFER_SIZE];
 static int cmd_index;
+static int cmd_cursor;
 static uint8_t prompt_color;
 
+// Command history
+static char history[HISTORY_SIZE][CMD_BUFFER_SIZE];
+static int history_count;
+static int history_index; 
+
+// String utilities
 static int str_eq(const char* a, const char* b) {
     while (*a && *b) {
         if (*a++ != *b++) return 0;
@@ -24,11 +33,24 @@ static int str_starts_with(const char* str, const char* prefix) {
     return 1;
 }
 
-// Skip leading spaces
+static int str_len(const char* s) {
+    int len = 0;
+    while (*s++) len++;
+    return len;
+}
+
+static void str_copy(char* dest, const char* src) {
+    while (*src) {
+        *dest++ = *src++;
+    }
+    *dest = '\0';
+}
+
 static const char* skip_spaces(const char* s) {
     while (*s == ' ') s++;
     return s;
 }
+
 static int parse_int(const char* s) {
     int result = 0;
     while (*s >= '0' && *s <= '9') {
@@ -38,11 +60,60 @@ static int parse_int(const char* s) {
     return result;
 }
 
+// Clear current input line and reprint
+static void shell_redraw_line() {
+    // Move to start of input (after prompt)
+    vga_print("\r");
+    vga_set_color(prompt_color, VGA_BLACK);
+    vga_print("chris@minios");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    vga_print("> ");
+    
+    // Print current buffer
+    cmd_buffer[cmd_index] = '\0';
+    vga_print(cmd_buffer);
+    
+    // Clear rest of line
+    for (int i = cmd_index; i < 60; i++) {
+        vga_put_char(' ');
+    }
+    
+    // Reposition cursor
+    vga_print("\r");
+    vga_set_color(prompt_color, VGA_BLACK);
+    vga_print("chris@minios");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    vga_print("> ");
+    for (int i = 0; i < cmd_cursor; i++) {
+        vga_put_char(cmd_buffer[i]);
+    }
+}
+
 static void shell_prompt() {
     vga_set_color(prompt_color, VGA_BLACK);
     vga_print("chris@minios");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
     vga_print("> ");
+}
+
+static void history_add(const char* cmd) {
+    if (str_len(cmd) == 0) return;
+    
+    // Don't add duplicates of last command
+    if (history_count > 0 && str_eq(history[history_count - 1], cmd)) {
+        return;
+    }
+    
+    // Shift history if full
+    if (history_count >= HISTORY_SIZE) {
+        for (int i = 0; i < HISTORY_SIZE - 1; i++) {
+            str_copy(history[i], history[i + 1]);
+        }
+        history_count = HISTORY_SIZE - 1;
+    }
+    
+    str_copy(history[history_count], cmd);
+    history_count++;
 }
 
 // Commands
@@ -137,6 +208,10 @@ static void shell_execute() {
     
     const char* cmd = skip_spaces(cmd_buffer);
     
+    // Add to history before executing
+    history_add(cmd);
+    history_index = history_count;
+    
     if (*cmd == '\0') {
         // Empty command
     }
@@ -181,12 +256,16 @@ static void shell_execute() {
     }
     
     cmd_index = 0;
+    cmd_cursor = 0;
     shell_prompt();
 }
 
 void shell_init() {
     cmd_index = 0;
+    cmd_cursor = 0;
     prompt_color = VGA_LIGHT_GREEN;
+    history_count = 0;
+    history_index = 0;
     
     vga_init();
     vga_clear();
@@ -203,21 +282,68 @@ void shell_init() {
     shell_prompt();
 }
 
-void shell_handle_key(char c) {
+void shell_handle_key(uint8_t c) {
     if (c == '\n') {
         vga_put_char('\n');
         shell_execute();
     }
     else if (c == '\b') {
-        if (cmd_index > 0) {
+        if (cmd_cursor > 0) {
+            for (int i = cmd_cursor - 1; i < cmd_index - 1; i++) {
+                cmd_buffer[i] = cmd_buffer[i + 1];
+            }
             cmd_index--;
-            vga_put_char('\b');
+            cmd_cursor--;
+            shell_redraw_line();
+        }
+    }
+    else if (c == KEY_UP) {
+        if (history_index > 0) {
+            history_index--;
+            str_copy(cmd_buffer, history[history_index]);
+            cmd_index = str_len(cmd_buffer);
+            cmd_cursor = cmd_index;
+            shell_redraw_line();
+        }
+    }
+    else if (c == KEY_DOWN) {
+        if (history_index < history_count - 1) {
+            history_index++;
+            str_copy(cmd_buffer, history[history_index]);
+            cmd_index = str_len(cmd_buffer);
+            cmd_cursor = cmd_index;
+            shell_redraw_line();
+        }
+        else if (history_index < history_count) {
+            history_index = history_count;
+            cmd_index = 0;
+            cmd_cursor = 0;
+            cmd_buffer[0] = '\0';
+            shell_redraw_line();
+        }
+    }
+    else if (c == KEY_LEFT) {
+        if (cmd_cursor > 0) {
+            cmd_cursor--;
+            vga_print("\b"); 
+        }
+    }
+    else if (c == KEY_RIGHT) {
+        if (cmd_cursor < cmd_index) {
+            vga_put_char(cmd_buffer[cmd_cursor]);
+            cmd_cursor++;
         }
     }
     else if (c >= ' ' && c <= '~') {
         if (cmd_index < CMD_BUFFER_SIZE - 1) {
-            cmd_buffer[cmd_index++] = c;
-            vga_put_char(c);
+            // Insert at cursor position
+            for (int i = cmd_index; i > cmd_cursor; i--) {
+                cmd_buffer[i] = cmd_buffer[i - 1];
+            }
+            cmd_buffer[cmd_cursor] = c;
+            cmd_index++;
+            cmd_cursor++;
+            shell_redraw_line();
         }
     }
 }
