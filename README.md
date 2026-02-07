@@ -12,9 +12,14 @@ Heavily in progress.
 - **IDT**: Complete Interrupt Descriptor Table with ISRs
 - **PIC**: Programmable Interrupt Controller with remapping
 - **PIT Timer**: Programmable Interval Timer at 100Hz with handler registration
-- **Keyboard Driver**: PS/2 keyboard input with scancode-to-ASCII conversion
-- **VGA Text Mode**: Text output with scrolling support
+- **Keyboard Driver**: PS/2 keyboard with shift, caps lock, and arrow key support
+- **VGA Text Mode**: Full text driver with colors, scrolling, and cursor control
 - **Sleep**: Timing functions (sleep_ms, sleep_ticks)
+- **Interactive Shell**: Command-line interface with:
+  - Command history (up/down arrows)
+  - Cursor movement (left/right arrows)
+  - Customizable prompt colors
+  - Built-in commands: `help`, `clear`, `echo`, `ticks`, `uptime`, `about`, `color`, `colors`
 
 ## Project Structure
 
@@ -27,6 +32,8 @@ Heavily in progress.
 ├── pic.cpp            # PIC controller
 ├── timer.cpp          # PIT timer driver
 ├── keyboard.cpp       # PS/2 keyboard driver
+├── vga.cpp            # VGA text mode driver
+├── shell.cpp          # Interactive command shell
 ├── sleep.cpp          # Sleep/delay functions
 ├── ports.h            # I/O port operations
 └── Makefile           # Build automation
@@ -56,6 +63,19 @@ make clean
 make rebuild
 ```
 
+## Shell Commands
+
+| Command | Description |
+|---------|-------------|
+| `help` | Show available commands |
+| `clear` | Clear the screen |
+| `echo <text>` | Print text to screen |
+| `ticks` | Show raw timer ticks |
+| `uptime` | Show formatted system uptime |
+| `about` | Display system information |
+| `color <0-15>` | Change prompt color |
+| `colors` | Show available colors |
+
 ## Development Environment
 
 - WSL (Ubuntu, Debian derivative) on Windows
@@ -69,10 +89,13 @@ make rebuild
 - [x] IDT & ISRs
 - [x] PIC remapping
 - [x] Timer (IRQ0)
-- [x] Keyboard driver
+- [x] Keyboard driver (with shift & caps lock)
 - [x] Sleep functions
-- [x] Command shell interface
-- [ ] Memory management (physical & virtual)
+- [x] VGA text driver
+- [x] Command shell with history
+- [ ] Physical memory manager
+- [ ] Heap allocator (kmalloc/kfree)
+- [ ] Virtual memory / paging
 - [ ] File system support
 
 ## Resources
