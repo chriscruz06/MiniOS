@@ -71,7 +71,7 @@ make rebuild
 - [x] Timer (IRQ0)
 - [x] Keyboard driver
 - [x] Sleep functions
-- [ ] Command shell interface
+- [x] Command shell interface
 - [ ] Memory management (physical & virtual)
 - [ ] File system support
 
