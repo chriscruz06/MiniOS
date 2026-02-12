@@ -4,6 +4,8 @@
 #include "sleep.h"
 #include "ports.h"
 #include "keyboard.h"
+#include "pmm.h"
+#include "kheap.h"
 
 #define CMD_BUFFER_SIZE 256
 #define HISTORY_SIZE 10
@@ -127,6 +129,10 @@ static void cmd_help() {
     vga_print("  about         - System information\n");
     vga_print("  color <fg>    - Set prompt color (0-15)\n");
     vga_print("  colors        - Show all colors\n");
+    vga_print("  memmap        - Show E820 memory map & PMM stats\n");
+    vga_print("  memtest       - Allocate and free page frames\n");
+    vga_print("  heap          - Show kernel heap stats\n");
+    vga_print("  heaptest      - Test kmalloc/kfree\n");
 }
 
 static void cmd_echo(const char* args) {
@@ -158,7 +164,7 @@ static void cmd_uptime() {
 
 static void cmd_about() {
     vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
-    vga_print("\n  ChrisOS / MiniOS v0.1\n");
+    vga_print("\n  MiniOS v0.2\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
     vga_print("  A bare-metal x86 operating system\n");
     vga_print("  Built from scratch as a learning project\n\n");
@@ -167,7 +173,8 @@ static void cmd_about() {
     vga_print("   - IDT & ISR interrupt handling\n");
     vga_print("   - PIC with timer (100Hz) & keyboard\n");
     vga_print("   - VGA text mode driver\n");
-    vga_print("   - Interactive shell\n\n");
+    vga_print("   - Interactive shell\n");
+    vga_print("   - Physical memory manager (E820 + bitmap)\n\n");
 }
 
 static void cmd_colors() {
@@ -203,6 +210,148 @@ static void cmd_color(const char* args) {
     vga_print("Prompt color set!\n");
 }
 
+static void cmd_memtest() {
+    vga_set_color(VGA_YELLOW, VGA_BLACK);
+    vga_print("Allocating 5 page frames...\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    
+    void* frames[5];
+    for (int i = 0; i < 5; i++) {
+        frames[i] = pmm_alloc_frame();
+        vga_print("  Frame ");
+        vga_print_int(i);
+        vga_print(": ");
+        if (frames[i]) {
+            vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+            vga_print_hex((uint32_t)frames[i]);
+        } else {
+            vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+            vga_print("FAILED");
+        }
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        vga_put_char('\n');
+    }
+    
+    vga_print("  Free frames: ");
+    vga_print_int(pmm_get_free_frames());
+    vga_put_char('\n');
+    
+    vga_set_color(VGA_YELLOW, VGA_BLACK);
+    vga_print("Freeing all frames...\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    
+    for (int i = 0; i < 5; i++) {
+        if (frames[i]) {
+            pmm_free_frame(frames[i]);
+        }
+    }
+    
+    vga_print("  Free frames: ");
+    vga_print_int(pmm_get_free_frames());
+    vga_print(" (should match before alloc)\n");
+}
+
+static void cmd_heap() {
+    vga_set_color(VGA_YELLOW, VGA_BLACK);
+    vga_print("Kernel Heap Stats:\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    
+    vga_print("  Total: ");
+    vga_print_int(kheap_get_total_bytes());
+    vga_print(" bytes (");
+    vga_print_int(kheap_get_total_bytes() / 1024);
+    vga_print(" KB)\n");
+    
+    vga_print("  Used:  ");
+    vga_print_int(kheap_get_used_bytes());
+    vga_print(" bytes\n");
+    
+    vga_print("  Free:  ");
+    vga_print_int(kheap_get_free_bytes());
+    vga_print(" bytes\n");
+    
+    vga_print("  Blocks: ");
+    vga_print_int(kheap_get_block_count());
+    vga_put_char('\n');
+}
+
+static void cmd_heaptest() {
+    vga_set_color(VGA_YELLOW, VGA_BLACK);
+    vga_print("Heap allocation test...\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    
+    // Show initial state
+    vga_print("  Before: ");
+    vga_print_int(kheap_get_free_bytes());
+    vga_print(" bytes free, ");
+    vga_print_int(kheap_get_block_count());
+    vga_print(" blocks\n");
+    
+    // Allocate a few things
+    vga_print("  Allocating 64, 128, 256 bytes...\n");
+    void* a = kmalloc(64);
+    void* b = kmalloc(128);
+    void* c = kmalloc(256);
+    
+    vga_print("    a=");
+    vga_print_hex((uint32_t)a);
+    vga_print("  b=");
+    vga_print_hex((uint32_t)b);
+    vga_print("  c=");
+    vga_print_hex((uint32_t)c);
+    vga_put_char('\n');
+    
+    // Verify they're in heap range
+    bool ok = a && b && c;
+    if (ok) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print("  Allocations OK\n");
+    } else {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("  ALLOCATION FAILED\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        return;
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    
+    // Free middle block
+    vga_print("  Freeing b (128 bytes)...\n");
+    kfree(b);
+    
+    vga_print("  After free: ");
+    vga_print_int(kheap_get_block_count());
+    vga_print(" blocks\n");
+    
+    // Reallocate into freed space
+    vga_print("  Allocating 100 bytes (should reuse b's slot)...\n");
+    void* d = kmalloc(100);
+    vga_print("    d=");
+    vga_print_hex((uint32_t)d);
+    vga_put_char('\n');
+    
+    // Free everything
+    vga_print("  Freeing all...\n");
+    kfree(a);
+    kfree(c);
+    kfree(d);
+    
+    // Final state - should coalesce back to 1 block
+    vga_print("  After: ");
+    vga_print_int(kheap_get_free_bytes());
+    vga_print(" bytes free, ");
+    vga_print_int(kheap_get_block_count());
+    vga_print(" blocks");
+    
+    if (kheap_get_block_count() == 1) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print(" (coalesced!)\n");
+    } else {
+        vga_set_color(VGA_YELLOW, VGA_BLACK);
+        vga_print("\n");
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+}
+
 static void shell_execute() {
     cmd_buffer[cmd_index] = '\0';
     
@@ -220,6 +369,12 @@ static void shell_execute() {
     }
     else if (str_eq(cmd, "clear")) {
         vga_clear();
+    }
+    else if (str_eq(cmd, "heap")) {
+        cmd_heap();
+    }
+    else if (str_eq(cmd, "heaptest")) {
+        cmd_heaptest();
     }
     else if (str_starts_with(cmd, "echo ")) {
         cmd_echo(cmd + 5);
@@ -246,6 +401,12 @@ static void shell_execute() {
     }
     else if (str_eq(cmd, "color")) {
         cmd_color("");
+    }
+    else if (str_eq(cmd, "memmap")) {
+        pmm_dump();
+    }
+    else if (str_eq(cmd, "memtest")) {
+        cmd_memtest();
     }
     else {
         vga_set_color(VGA_LIGHT_RED, VGA_BLACK);

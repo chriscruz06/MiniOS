@@ -1,44 +1,124 @@
 [org 0x7c00]                        
 KERNEL_LOCATION equ 0x1000
-                                    
+
+; ============================================================
+; E820 memory map stored at 0x8000:
+;   [0x8000]       = uint32_t entry_count
+;   [0x8004+]      = array of E820 entries (24 bytes each)
+; ============================================================
+E820_MAP     equ 0x8000
+E820_ENTRIES equ 0x8004
 
 mov [BOOT_DISK], dl                 
 
-                                    
+; Set up segments and stack (keep original layout)
 xor ax, ax                          
 mov es, ax
 mov ds, ax
-mov bp, 0x8000
+mov bp, 0x9000       ; Stack well above everything
 mov sp, bp
 
-mov bx, KERNEL_LOCATION
-mov dh, 20
+; ============================================================
+; Step 1: Load kernel from disk FIRST (before E820)
+; Read one sector at a time, advancing CHS properly
+; Floppy geometry: 18 sectors/track, 2 heads
+; ============================================================
+load_kernel:
+    mov bx, KERNEL_LOCATION ; destination buffer
+    mov cl, 2               ; starting sector (1-indexed, sector 2)
+    mov ch, 0               ; cylinder 0
+    mov dh, 0               ; head 0
+    mov si, 50              ; total sectors to read (max safe: 54)
 
-mov ah, 0x02
-mov al, dh 
-mov ch, 0x00
-mov dh, 0x00
-mov cl, 0x02
-mov dl, [BOOT_DISK]
-int 0x13                ; no error management, cooked
+.read_loop:
+    cmp si, 0
+    je .read_done
 
-                                    
-mov ah, 0x0
-mov al, 0x3
-int 0x10                ; text mode
+    mov ah, 0x02            ; BIOS read sectors
+    mov al, 1               ; read 1 sector at a time
+    mov dl, [BOOT_DISK]
+    int 0x13
+    jc .read_loop           ; retry on error
 
+    add bx, 512             ; advance buffer by one sector
+    dec si
 
+    ; Advance CHS to next sector
+    inc cl                  ; next sector number
+    cmp cl, 19              ; past sector 18? (floppy = 18 sectors/track)
+    jne .read_loop
+
+    mov cl, 1               ; reset to sector 1
+    inc dh                  ; next head
+    cmp dh, 2               ; past head 1?
+    jne .read_loop
+
+    mov dh, 0               ; reset head
+    inc ch                  ; next cylinder
+    jmp .read_loop
+
+.read_done:
+
+; ============================================================
+; Step 2: Set text mode
+; ============================================================                                    
+    mov ah, 0x0
+    mov al, 0x3
+    int 0x10                ; text mode
+
+; ============================================================
+; Step 3: Detect memory map using BIOS INT 0x15, EAX=0xE820
+; (Done AFTER disk load to avoid any register/stack issues)
+; ============================================================
+detect_memory:
+    xor ax, ax
+    mov es, ax              ; ES = 0 (ES:DI points to E820_ENTRIES)
+    mov di, E820_ENTRIES    ; DI = destination for entries
+    xor ebx, ebx           ; EBX = 0 to start
+    xor bp, bp              ; BP = entry counter (using BP since we don't need stack frame here)
+    mov edx, 0x534D4150    ; 'SMAP' magic number
+
+.e820_loop:
+    mov eax, 0xE820        ; Function number
+    mov ecx, 24            ; Ask for 24 bytes per entry
+    int 0x15
+
+    jc .e820_done           ; Carry flag = error or done
+    cmp eax, 0x534D4150    ; Should return 'SMAP'
+    jne .e820_done
+
+    ; Check if entry length is 0 (some BIOSes return empty entries)
+    cmp dword [es:di + 8], 0
+    jne .valid_entry
+    cmp dword [es:di + 12], 0
+    je .skip_entry          ; Length is 0, skip this entry
+
+.valid_entry:
+    inc bp                  ; Count valid entries
+    add di, 24             ; Move to next slot
+
+.skip_entry:
+    test ebx, ebx
+    jz .e820_done           ; EBX = 0 means last entry
+    jmp .e820_loop
+
+.e820_done:
+    mov [E820_MAP], bp      ; Store entry count
+
+; ============================================================
+; Step 4: Enter protected mode
+; ============================================================
 CODE_SEG equ GDT_code - GDT_start
 DATA_SEG equ GDT_data - GDT_start
 
-cli
-lgdt [GDT_descriptor]
-mov eax, cr0
-or eax, 1
-mov cr0, eax
-jmp CODE_SEG:start_protected_mode
+    cli
+    lgdt [GDT_descriptor]
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+    jmp CODE_SEG:start_protected_mode
 
-jmp $
+    jmp $
                                     
 BOOT_DISK: db 0
 
