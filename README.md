@@ -18,11 +18,15 @@ Heavily in progress.
 - **Physical Memory Manager**: E820 BIOS memory detection with bitmap-based frame allocation
 - **Virtual Memory**: Paging with identity-mapped kernel space, page fault handler with debug output
 - **Kernel Heap**: kmalloc/kfree with free-list allocator, block splitting, and coalescing
+- **ATA PIO Disk Driver**: IDE controller communication with 28-bit LBA addressing, supporting read/write operations on drives up to 128GB
+- **FAT16 Filesystem**: Full read/write FAT16 implementation with BPB parsing, cluster chain traversal, dual FAT table updates, file creation/deletion, and directory support
 - **Interactive Shell**: Command-line interface with:
   - Command history (up/down arrows)
   - Cursor movement (left/right arrows)
   - Customizable prompt colors
-  - Built-in commands: `help`, `clear`, `echo`, `ticks`, `uptime`, `about`, `color`, `colors`, `memmap`, `memtest`, `heap`, `heaptest`
+  - File management: `ls`, `cat`, `write`, `touch`, `rm`, `mkdir`
+  - System commands: `help`, `clear`, `echo`, `ticks`, `uptime`, `about`, `color`, `colors`
+  - Memory diagnostics: `memmap`, `memtest`, `heap`, `heaptest`, `disktest`
 
 ## Project Structure
 
@@ -41,7 +45,9 @@ Heavily in progress.
 ├── pmm.cpp            # Physical memory manager (bitmap allocator)
 ├── paging.cpp         # Virtual memory / paging
 ├── kheap.cpp          # Kernel heap (kmalloc/kfree)
-├── ports.h            # I/O port operations
+├── ata.cpp            # ATA PIO disk driver
+├── fat16.cpp          # FAT16 filesystem driver
+├── ports.h            # I/O port operations (8-bit and 16-bit)
 └── Makefile           # Build automation
 ```
 
@@ -52,6 +58,7 @@ Heavily in progress.
 - NASM assembler
 - i686-elf cross-compiler toolchain
 - QEMU for testing
+- dosfstools (for creating FAT16 disk images)
 
 ### Build Commands
 
@@ -62,11 +69,26 @@ make
 # Build and run in QEMU
 make run
 
-# Clean build artifacts
+# Clean build artifacts (preserves disk image)
 make clean
+
+# Clean everything including disk image
+make cleanall
 
 # Full rebuild
 make rebuild
+
+# Create a fresh FAT16 disk image
+make newdisk
+```
+
+### Adding Files to the Disk Image (from host)
+
+```bash
+mkdir -p /tmp/fatmnt
+sudo mount -o loop disk.img /tmp/fatmnt
+echo "Hello from MiniOS!" | sudo tee /tmp/fatmnt/HELLO.TXT
+sudo umount /tmp/fatmnt
 ```
 
 ## Shell Commands
@@ -85,6 +107,32 @@ make rebuild
 | `memtest` | Allocate and free physical page frames |
 | `heap` | Show kernel heap stats |
 | `heaptest` | Test kmalloc/kfree with allocation, freeing, and coalescing |
+| `disktest` | Test ATA disk driver (detect, read, write/verify) |
+| `ls` | List files and directories on disk |
+| `cat <file>` | Display file contents |
+| `write <file> <text>` | Create a file with the given text |
+| `touch <file>` | Create an empty file |
+| `rm <file>` | Delete a file |
+| `mkdir <name>` | Create a directory |
+
+## Memory Map
+
+| Address | Contents |
+|---------|----------|
+| `0x1000` | IDT |
+| `0x7C00` | Bootloader |
+| `0x8000` | E820 memory map |
+| `0x9000` | Real mode stack |
+| `0x10000` | Kernel (~34KB, loaded from floppy) |
+| `0x90000` | Protected mode stack |
+
+## Architecture
+
+The system boots from a 1.44MB floppy image and attaches a separate 16MB FAT16-formatted hard disk image for filesystem operations. The bootloader loads the kernel using BIOS INT 13h with CHS addressing (sector-by-sector to handle track boundaries), detects available memory via E820, then transitions to 32-bit protected mode.
+
+The kernel initializes subsystems in dependency order: IDT/ISRs, PIC, keyboard, timer, ATA disk driver, FAT16 filesystem, physical memory manager, paging, heap allocator, and finally the interactive shell. Interrupts are enabled after all initialization is complete.
+
+The FAT16 driver communicates with the disk through the ATA PIO driver, which talks directly to the IDE controller via I/O ports 0x1F0-0x1F7. File operations follow standard FAT16 conventions: BPB parsing for disk layout, cluster chain traversal through the FAT table, and dual FAT table updates for write operations.
 
 ## Development Environment
 
@@ -106,7 +154,11 @@ make rebuild
 - [x] Physical memory manager (E820 + bitmap)
 - [x] Virtual memory / paging
 - [x] Kernel heap (kmalloc/kfree)
-- [ ] File system support
+- [x] ATA PIO disk driver
+- [x] FAT16 filesystem (read/write/delete/mkdir)
+- [ ] Subdirectory navigation (cd)
+- [ ] User program loading & execution
+- [ ] Multitasking / process management
 
 ## Resources
 

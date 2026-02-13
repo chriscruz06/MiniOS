@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "paging.h"
 #include "kheap.h"
+#include "ata.h"
+#include "fat16.h"
 
 
 extern "C" void main() {
@@ -14,6 +16,8 @@ extern "C" void main() {
     // Initialize drivers
     keyboard_init();
     timer_init(100);  // 100 Hz = tick per 10ms
+    ata_init();
+    fat16_init();
     
     // Initialize physical memory manager (reads E820 map from bootloader)
     pmm_init();

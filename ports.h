@@ -15,7 +15,19 @@ static inline void outb(uint16_t port, uint8_t data) {
     __asm__ volatile("outb %0, %1" : : "a"(data), "Nd"(port));
 }
 
-// Small delay for safety (I guess idk the exact reasoning just know its good)
+// Read a 16-bit word from a port (needed for ATA PIO data transfers)
+static inline uint16_t inw(uint16_t port) {
+    uint16_t result;
+    __asm__ volatile("inw %1, %0" : "=a"(result) : "Nd"(port));
+    return result;
+}
+
+// Write a 16-bit word to a port
+static inline void outw(uint16_t port, uint16_t data) {
+    __asm__ volatile("outw %0, %1" : : "a"(data), "Nd"(port));
+}
+
+// Small delay for safety (reading port 0x80 takes ~1µs on ISA bus)
 static inline void io_wait() {
     outb(0x80, 0);
 }

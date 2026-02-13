@@ -3,8 +3,8 @@
 #include "isr.h"
 #include "pic.h"
 
-#define IDT_ADDRESS 0x10000
-#define IDT_DESC_ADDRESS 0x10800
+#define IDT_ADDRESS 0x1000
+#define IDT_DESC_ADDRESS 0x1800
 
 #define idt ((IDTEntry*)IDT_ADDRESS)
 #define idt_descriptor (*(IDTDescriptor*)IDT_DESC_ADDRESS)

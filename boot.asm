@@ -1,5 +1,5 @@
 [org 0x7c00]                        
-KERNEL_LOCATION equ 0x1000
+KERNEL_LOCATION equ 0x10000
 
 ; ============================================================
 ; E820 memory map stored at 0x8000:
@@ -11,24 +11,26 @@ E820_ENTRIES equ 0x8004
 
 mov [BOOT_DISK], dl                 
 
-; Set up segments and stack (keep original layout)
+; Set up segments and stack
 xor ax, ax                          
-mov es, ax
 mov ds, ax
 mov bp, 0x9000       ; Stack well above everything
 mov sp, bp
 
 ; ============================================================
 ; Step 1: Load kernel from disk FIRST (before E820)
-; Read one sector at a time, advancing CHS properly
+; Load to physical address 0x10000 using ES:BX = 0x1000:0x0000
+; This avoids overwriting the bootloader at 0x7C00
 ; Floppy geometry: 18 sectors/track, 2 heads
 ; ============================================================
 load_kernel:
-    mov bx, KERNEL_LOCATION ; destination buffer
+    mov ax, 0x1000          ; ES = 0x1000
+    mov es, ax              ; ES:BX = 0x1000:0x0000 = physical 0x10000
+    mov bx, 0x0000          ; destination offset
     mov cl, 2               ; starting sector (1-indexed, sector 2)
     mov ch, 0               ; cylinder 0
     mov dh, 0               ; head 0
-    mov si, 50              ; total sectors to read (max safe: 54)
+    mov si, 80              ; total sectors to read
 
 .read_loop:
     cmp si, 0
@@ -68,14 +70,14 @@ load_kernel:
 
 ; ============================================================
 ; Step 3: Detect memory map using BIOS INT 0x15, EAX=0xE820
-; (Done AFTER disk load to avoid any register/stack issues)
+; Need to reset ES back to 0 for E820 (it was 0x1000 for disk load)
 ; ============================================================
 detect_memory:
     xor ax, ax
     mov es, ax              ; ES = 0 (ES:DI points to E820_ENTRIES)
     mov di, E820_ENTRIES    ; DI = destination for entries
     xor ebx, ebx           ; EBX = 0 to start
-    xor bp, bp              ; BP = entry counter (using BP since we don't need stack frame here)
+    xor bp, bp              ; BP = entry counter
     mov edx, 0x534D4150    ; 'SMAP' magic number
 
 .e820_loop:

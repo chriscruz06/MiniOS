@@ -6,6 +6,8 @@
 #include "keyboard.h"
 #include "pmm.h"
 #include "kheap.h"
+#include "ata.h"
+#include "fat16.h"
 
 #define CMD_BUFFER_SIZE 256
 #define HISTORY_SIZE 10
@@ -133,6 +135,13 @@ static void cmd_help() {
     vga_print("  memtest       - Allocate and free page frames\n");
     vga_print("  heap          - Show kernel heap stats\n");
     vga_print("  heaptest      - Test kmalloc/kfree\n");
+    vga_print("  disktest      - Test ATA disk driver\n");
+    vga_print("  ls            - List files on disk\n");
+    vga_print("  cat <file>    - Display file contents\n");
+    vga_print("  write <f> <t> - Create file with text\n");
+    vga_print("  touch <file>  - Create empty file\n");
+    vga_print("  rm <file>     - Delete a file\n");
+    vga_print("  mkdir <name>  - Create a directory\n");
 }
 
 static void cmd_echo(const char* args) {
@@ -164,7 +173,7 @@ static void cmd_uptime() {
 
 static void cmd_about() {
     vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
-    vga_print("\n  MiniOS v0.2\n");
+    vga_print("\n  MiniOS v0.3\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
     vga_print("  A bare-metal x86 operating system\n");
     vga_print("  Built from scratch as a learning project\n\n");
@@ -173,10 +182,13 @@ static void cmd_about() {
     vga_print("   - IDT & ISR interrupt handling\n");
     vga_print("   - PIC with timer (100Hz) & keyboard\n");
     vga_print("   - VGA text mode driver\n");
-    vga_print("   - Interactive shell\n");
-    vga_print("   - Physical memory manager (E820 + bitmap)\n\n");
+    vga_print("   - Interactive shell with history\n");
+    vga_print("   - Physical memory manager (E820 + bitmap)\n");
+    vga_print("   - Virtual memory / paging\n");
+    vga_print("   - Kernel heap (kmalloc/kfree)\n");
+    vga_print("   - ATA PIO disk driver\n");
+    vga_print("   - FAT16 filesystem (read/write/delete)\n\n");
 }
-
 static void cmd_colors() {
     vga_print("Available colors:\n");
     const char* color_names[] = {
@@ -352,6 +364,343 @@ static void cmd_heaptest() {
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
 }
 
+static void cmd_disktest() {
+    vga_set_color(VGA_YELLOW, VGA_BLACK);
+    vga_print("ATA Disk Driver Test\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    // Step 1: Detect the drive
+    vga_print("  Detecting drive... ");
+    int result = ata_init();
+    if (result != 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("FAILED (error ");
+        vga_print_int(result);
+        vga_print(")\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        return;
+    }
+    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+    vga_print("OK\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    // Step 2: Read sector 0 (FAT16 boot sector / BPB)
+    uint8_t buf[512];
+    vga_print("  Reading sector 0... ");
+    result = ata_read_sectors(0, 1, buf);
+    if (result != 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("FAILED (error ");
+        vga_print_int(result);
+        vga_print(")\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        return;
+    }
+    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+    vga_print("OK\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    // Step 3: Check boot signature at bytes 510-511
+    vga_print("  Boot signature: 0x");
+    vga_print_hex(buf[511]);
+    vga_print_hex(buf[510]);
+    if (buf[510] == 0x55 && buf[511] == 0xAA) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print(" VALID\n");
+    } else {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print(" INVALID\n");
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    // Step 4: Print OEM name from BPB (bytes 3-10)
+    vga_print("  OEM Name: ");
+    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
+    for (int i = 3; i < 11; i++) {
+        char c = buf[i];
+        if (c >= 32 && c < 127) {
+            vga_put_char(c);
+        }
+    }
+    vga_put_char('\n');
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    // Step 5: Print some FAT16 BPB fields
+    uint16_t bytes_per_sector = buf[11] | (buf[12] << 8);
+    uint8_t sectors_per_cluster = buf[13];
+    uint16_t reserved_sectors = buf[14] | (buf[15] << 8);
+    uint8_t num_fats = buf[16];
+    uint16_t root_entry_count = buf[17] | (buf[18] << 8);
+    uint16_t total_sectors_16 = buf[19] | (buf[20] << 8);
+
+    vga_print("  Bytes/sector:     ");
+    vga_print_int(bytes_per_sector);
+    vga_put_char('\n');
+    vga_print("  Sectors/cluster:  ");
+    vga_print_int(sectors_per_cluster);
+    vga_put_char('\n');
+    vga_print("  Reserved sectors: ");
+    vga_print_int(reserved_sectors);
+    vga_put_char('\n');
+    vga_print("  Number of FATs:   ");
+    vga_print_int(num_fats);
+    vga_put_char('\n');
+    vga_print("  Root entries:     ");
+    vga_print_int(root_entry_count);
+    vga_put_char('\n');
+    vga_print("  Total sectors:    ");
+    vga_print_int(total_sectors_16);
+    vga_put_char('\n');
+
+    // Step 6: Read-write-read test on a high sector to avoid trashing the FAT
+    vga_set_color(VGA_YELLOW, VGA_BLACK);
+    vga_print("  Write/read test...\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    uint8_t write_buf[512];
+    uint8_t read_buf[512];
+    // Fill with a recognizable pattern
+    for (int i = 0; i < 512; i++) {
+        write_buf[i] = (uint8_t)(i & 0xFF);
+    }
+
+    // Use a high sector number to avoid corrupting FAT/root dir
+    uint32_t test_sector = 1000;
+
+    vga_print("    Writing sector ");
+    vga_print_int(test_sector);
+    vga_print("... ");
+    result = ata_write_sectors(test_sector, write_buf, 1);
+    if (result != 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("FAILED\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        return;
+    }
+    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+    vga_print("OK\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    vga_print("    Reading it back... ");
+    result = ata_read_sectors(test_sector, 1, read_buf);
+    if (result != 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("FAILED\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        return;
+    }
+    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+    vga_print("OK\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+
+    // Verify data matches
+    vga_print("    Verifying data... ");
+    bool match = true;
+    for (int i = 0; i < 512; i++) {
+        if (read_buf[i] != write_buf[i]) {
+            match = false;
+            break;
+        }
+    }
+    if (match) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print("PASS - all 512 bytes match!\n");
+    } else {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("FAIL - data mismatch!\n");
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+}
+
+static void cmd_ls() {
+    fat16_list_root();
+}
+
+static void cmd_cat(const char* args) {
+    args = skip_spaces(args);
+    if (*args == '\0') {
+        vga_print("Usage: cat <filename>\n");
+        return;
+    }
+    
+    // Get file size first
+    int size = fat16_file_size(args);
+    if (size < 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("File not found: ");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        vga_print(args);
+        vga_put_char('\n');
+        return;
+    }
+    
+    if (size == 0) {
+        vga_print("(empty file)\n");
+        return;
+    }
+    
+    // Cap at 4KB for display - don't want to flood the screen
+    uint32_t read_size = (uint32_t)size;
+    if (read_size > 4096) read_size = 4096;
+    
+    // Allocate buffer from heap
+    uint8_t* buf = (uint8_t*)kmalloc(read_size + 1);
+    if (!buf) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("Out of memory\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        return;
+    }
+    
+    int bytes_read = fat16_read_file(args, buf, read_size);
+    if (bytes_read < 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("Error reading file\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        kfree(buf);
+        return;
+    }
+    
+    // Null-terminate and print
+    buf[bytes_read] = '\0';
+    
+    // Print character by character (handles non-printable chars)
+    for (int i = 0; i < bytes_read; i++) {
+        char c = buf[i];
+        if (c == '\n' || c == '\r') {
+            if (c == '\r' && i + 1 < bytes_read && buf[i + 1] == '\n') {
+                i++;  // Skip \n in \r\n pair
+            }
+            vga_put_char('\n');
+        } else if (c >= 32 && c < 127) {
+            vga_put_char(c);
+        } else if (c == '\t') {
+            vga_print("    ");
+        }
+    }
+    vga_put_char('\n');
+    
+    if ((uint32_t)size > 4096) {
+        vga_set_color(VGA_YELLOW, VGA_BLACK);
+        vga_print("(truncated - file is ");
+        vga_print_int(size);
+        vga_print(" bytes)\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    }
+    
+    kfree(buf);
+}
+
+static void cmd_write(const char* args) {
+    args = skip_spaces(args);
+    if (*args == '\0') {
+        vga_print("Usage: write <filename> <text>\n");
+        return;
+    }
+    
+    // Parse filename (first word)
+    char filename[64];
+    int fi = 0;
+    while (*args && *args != ' ' && fi < 63) {
+        filename[fi++] = *args++;
+    }
+    filename[fi] = '\0';
+    
+    // Rest is the content
+    args = skip_spaces(args);
+    if (*args == '\0') {
+        vga_print("Usage: write <filename> <text>\n");
+        return;
+    }
+    
+    int len = str_len(args);
+    
+    int result = fat16_create_file(filename, args, (uint32_t)len);
+    if (result == 0) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print("Wrote ");
+        vga_print_int(len);
+        vga_print(" bytes to ");
+        vga_print(filename);
+        vga_put_char('\n');
+    } else {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("Failed to write file\n");
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+}
+
+static void cmd_touch(const char* args) {
+    args = skip_spaces(args);
+    if (*args == '\0') {
+        vga_print("Usage: touch <filename>\n");
+        return;
+    }
+    
+    // Check if file already exists
+    int size = fat16_file_size(args);
+    if (size >= 0) {
+        vga_print("File already exists (");
+        vga_print_int(size);
+        vga_print(" bytes)\n");
+        return;
+    }
+    
+    int result = fat16_create_file(args, nullptr, 0);
+    if (result == 0) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print("Created ");
+        vga_print(args);
+        vga_put_char('\n');
+    } else {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("Failed to create file\n");
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+}
+
+static void cmd_rm(const char* args) {
+    args = skip_spaces(args);
+    if (*args == '\0') {
+        vga_print("Usage: rm <filename>\n");
+        return;
+    }
+    
+    int result = fat16_delete(args);
+    if (result == 0) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print("Deleted ");
+        vga_print(args);
+        vga_put_char('\n');
+    } else {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("File not found: ");
+        vga_print(args);
+        vga_put_char('\n');
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+}
+
+static void cmd_mkdir(const char* args) {
+    args = skip_spaces(args);
+    if (*args == '\0') {
+        vga_print("Usage: mkdir <dirname>\n");
+        return;
+    }
+    
+    int result = fat16_mkdir(args);
+    if (result == 0) {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print("Created directory ");
+        vga_print(args);
+        vga_put_char('\n');
+    } else {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("Failed (already exists or disk full)\n");
+    }
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+}
+
 static void shell_execute() {
     cmd_buffer[cmd_index] = '\0';
     
@@ -407,6 +756,27 @@ static void shell_execute() {
     }
     else if (str_eq(cmd, "memtest")) {
         cmd_memtest();
+    }
+    else if (str_eq(cmd, "disktest")) {
+        cmd_disktest();
+    }
+    else if (str_eq(cmd, "ls")) {
+        cmd_ls();
+    }
+    else if (str_starts_with(cmd, "cat ")) {
+        cmd_cat(cmd + 4);
+    }
+    else if (str_starts_with(cmd, "write ")) {
+        cmd_write(cmd + 6);
+    }
+    else if (str_starts_with(cmd, "touch ")) {
+        cmd_touch(cmd + 6);
+    }
+    else if (str_starts_with(cmd, "rm ")) {
+        cmd_rm(cmd + 3);
+    }
+    else if (str_starts_with(cmd, "mkdir ")) {
+        cmd_mkdir(cmd + 6);
     }
     else {
         vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
