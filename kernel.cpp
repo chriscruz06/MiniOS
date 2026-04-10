@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "paging.h"
 #include "kheap.h"
+#include "task.h"
 #include "ata.h"
 #include "fat16.h"
 
@@ -25,8 +26,11 @@ extern "C" void main() {
     // Initialize paging (identity maps first 1MB, enables paging)
     paging_init();
     
-    // Heap allocator 
+    // Heap allocator
     kheap_init();
+
+    // Multitasking scheduler (bootstraps current execution as task 0)
+    task_init();
 
     // Start shell (this clears screen and shows prompt)
     shell_init();

@@ -8,6 +8,7 @@
 #include "kheap.h"
 #include "ata.h"
 #include "fat16.h"
+#include "task.h"
 
 #define CMD_BUFFER_SIZE 256
 #define HISTORY_SIZE 10
@@ -142,6 +143,9 @@ static void cmd_help() {
     vga_print("  touch <file>  - Create empty file\n");
     vga_print("  rm <file>     - Delete a file\n");
     vga_print("  mkdir <name>  - Create a directory\n");
+    vga_print("  ps            - List running tasks\n");
+    vga_print("  spawn         - Spawn a demo counter task\n");
+    vga_print("  kill <id>     - Kill a task by ID\n");
 }
 
 static void cmd_echo(const char* args) {
@@ -681,6 +685,94 @@ static void cmd_rm(const char* args) {
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
 }
 
+// Demo task that counts to 5 with 1-second pauses, then exits
+static void demo_counter_task() {
+    for (int i = 0; i < 5; i++) {
+        vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
+        vga_print("[task ");
+        vga_print_int(task_get_current_id());
+        vga_print("] count ");
+        vga_print_int(i);
+        vga_put_char('\n');
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        task_sleep(100);  // 100 ticks = 1 second at 100Hz
+    }
+    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
+    vga_print("[task ");
+    vga_print_int(task_get_current_id());
+    vga_print("] done!\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    task_exit();
+}
+
+static void cmd_ps() {
+    Task* list = task_get_list();
+    vga_set_color(VGA_YELLOW, VGA_BLACK);
+    vga_print("ID  STATE     NAME\n");
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    for (int i = 0; i < MAX_TASKS; i++) {
+        if (list[i].state == TASK_DEAD) continue;
+        vga_print_int(list[i].id);
+        vga_print("   ");
+        switch (list[i].state) {
+            case TASK_RUNNING:  vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK); vga_print("RUNNING   "); break;
+            case TASK_READY:    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);  vga_print("READY     "); break;
+            case TASK_SLEEPING: vga_set_color(VGA_YELLOW, VGA_BLACK);      vga_print("SLEEPING  "); break;
+            default: break;
+        }
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        vga_print(list[i].name ? list[i].name : "?");
+        vga_put_char('\n');
+    }
+}
+
+static void cmd_spawn() {
+    int id = task_create(demo_counter_task, "counter");
+    if (id < 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("Failed to spawn task (max tasks reached?)\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    } else {
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_print("Spawned task ");
+        vga_print_int(id);
+        vga_put_char('\n');
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+    }
+}
+
+static void cmd_kill(const char* args) {
+    args = skip_spaces(args);
+    if (*args == '\0') {
+        vga_print("Usage: kill <id>\n");
+        return;
+    }
+    int id = parse_int(args);
+    if (id == 0) {
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_print("Cannot kill task 0\n");
+        vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+        return;
+    }
+    Task* list = task_get_list();
+    for (int i = 1; i < MAX_TASKS; i++) {
+        if (list[i].state != TASK_DEAD && (int)list[i].id == id) {
+            list[i].state = TASK_DEAD;
+            vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+            vga_print("Killed task ");
+            vga_print_int(id);
+            vga_put_char('\n');
+            vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+            return;
+        }
+    }
+    vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+    vga_print("No task with id ");
+    vga_print_int(id);
+    vga_put_char('\n');
+    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
+}
+
 static void cmd_mkdir(const char* args) {
     args = skip_spaces(args);
     if (*args == '\0') {
@@ -777,6 +869,15 @@ static void shell_execute() {
     }
     else if (str_starts_with(cmd, "mkdir ")) {
         cmd_mkdir(cmd + 6);
+    }
+    else if (str_eq(cmd, "ps")) {
+        cmd_ps();
+    }
+    else if (str_eq(cmd, "spawn")) {
+        cmd_spawn();
+    }
+    else if (str_starts_with(cmd, "kill ")) {
+        cmd_kill(cmd + 5);
     }
     else {
         vga_set_color(VGA_LIGHT_RED, VGA_BLACK);

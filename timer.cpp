@@ -1,6 +1,7 @@
 #include "timer.h"
 #include "isr.h"
 #include "ports.h"
+#include "task.h"
 
 static volatile uint32_t ticks = 0;
 
@@ -12,12 +13,13 @@ static volatile uint32_t ticks = 0;
 #define PIT_BASE_FREQ 1193180
 
 static void timer_callback(registers_t* regs) {
-    (void)regs;
     ticks++;
-    
+
     // Show tick count at top-right corner
     uint16_t* vga = (uint16_t*)0xb8000;
     vga[79] = (0x0E << 8) | ('0' + (ticks % 10));
+
+    task_schedule(regs);
 }
 
 void timer_init(uint32_t frequency) {

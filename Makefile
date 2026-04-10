@@ -15,18 +15,22 @@ ASM_BOOT = boot.asm
 ASM_ENTRY = kernel_entry.asm
 ASM_ISR = isr.asm
 ASM_IDT = idt.asm
+ASM_TASK_SWITCH = task_switch.asm
 
 CPP_SOURCES = kernel.cpp idt.cpp isr.cpp pic.cpp keyboard.cpp timer.cpp \
-              vga.cpp shell.cpp sleep.cpp pmm.cpp paging.cpp kheap.cpp ata.cpp fat16.cpp
+              vga.cpp shell.cpp sleep.cpp pmm.cpp paging.cpp kheap.cpp ata.cpp fat16.cpp \
+              task.cpp
 
 # Object files
 OBJ_ENTRY = kernel_entry.o
 OBJ_ISR_ASM = isr_asm.o
 OBJ_IDT_ASM = idt_asm.o
+OBJ_TASK_SWITCH = task_switch_asm.o
 OBJ_CPP = kernel.o idt.o isr.o pic.o keyboard.o timer.o \
-          vga.o shell.o sleep.o pmm.o paging.o kheap.o ata.o fat16.o
+          vga.o shell.o sleep.o pmm.o paging.o kheap.o ata.o fat16.o \
+          task.o
 
-ALL_OBJS = $(OBJ_ENTRY) $(OBJ_CPP) $(OBJ_IDT_ASM) $(OBJ_ISR_ASM)
+ALL_OBJS = $(OBJ_ENTRY) $(OBJ_CPP) $(OBJ_IDT_ASM) $(OBJ_ISR_ASM) $(OBJ_TASK_SWITCH)
 
 # Output files
 BOOT_BIN = boot.bin
@@ -78,6 +82,9 @@ $(OBJ_ISR_ASM): $(ASM_ISR)
 $(OBJ_IDT_ASM): $(ASM_IDT)
 	$(ASM) -f elf32 $< -o $@
 
+$(OBJ_TASK_SWITCH): $(ASM_TASK_SWITCH)
+	$(ASM) -f elf32 $< -o $@
+
 # C++ objects
 kernel.o: kernel.cpp
 	$(CC) $(CFLAGS) $< -o $@
@@ -94,13 +101,13 @@ pic.o: pic.cpp pic.h ports.h
 keyboard.o: keyboard.cpp keyboard.h isr.h ports.h shell.h
 	$(CC) $(CFLAGS) $< -o $@
 
-timer.o: timer.cpp timer.h isr.h ports.h
+timer.o: timer.cpp timer.h isr.h ports.h task.h
 	$(CC) $(CFLAGS) $< -o $@
 
 vga.o: vga.cpp vga.h
 	$(CC) $(CFLAGS) $< -o $@
 
-shell.o: shell.cpp shell.h vga.h timer.h sleep.h ports.h keyboard.h pmm.h kheap.h ata.h fat16.h
+shell.o: shell.cpp shell.h vga.h timer.h sleep.h ports.h keyboard.h pmm.h kheap.h ata.h fat16.h task.h
 	$(CC) $(CFLAGS) $< -o $@
 
 sleep.o: sleep.cpp sleep.h timer.h
@@ -119,6 +126,9 @@ ata.o: ata.cpp ata.h ports.h
 	$(CC) $(CFLAGS) $< -o $@
 
 fat16.o: fat16.cpp fat16.h ata.h vga.h
+	$(CC) $(CFLAGS) $< -o $@
+
+task.o: task.cpp task.h isr.h kheap.h timer.h
 	$(CC) $(CFLAGS) $< -o $@
 
 # Clean build artifacts (preserves disk image)
